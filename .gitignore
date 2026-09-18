@@ -1,11 +1,7 @@
-# Python cache
+# Python
 __pycache__/
 *.py[cod]
-
-# Build files
-build/
-dist/
-*.egg-info/
+*.pyo
 
 # Virtual environment
 .venv/
@@ -14,17 +10,21 @@ dist/
 .env
 .env.*
 
-# Uploaded files / generated files
-uploads/
-temp_resume.pdf
-
 # macOS
 .DS_Store
 
-# IDE
-.vscode/
+# Local uploaded resumes
+uploads/
+temp_resume.pdf
 
-# Jupyter
-.ipynb_checkpoints/
-# Agent/tool metadata
-.agents/
+# Generated vector stores
+vector_stores/
+resume_vectors.json
+
+# Development backups
+*_backup_*.py
+*_backup.py
+
+# Local test files
+semantic_search_test.py
+test_*.py
