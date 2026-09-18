@@ -4,7 +4,7 @@ from utils.pdf_reader import extract_text
 from utils.ai import analyze_resume
 from utils.jd_matcher import match_resume_to_job
 from utils.resume_store import build_resume_store
-from rag import answer_question
+from agent import run_agent
 
 
 # ============================================================
@@ -25,8 +25,9 @@ st.set_page_config(
 st.title("📄 AI Resume Reviewer")
 
 st.write(
-    "Upload your resume, analyze it with AI, and compare it "
-    "against a job description."
+    "Upload your resume, analyze it with AI, compare it "
+    "against a job description, and ask questions using "
+    "an agent-powered resume assistant."
 )
 
 
@@ -44,31 +45,28 @@ uploaded_file = st.file_uploader(
 
 if uploaded_file is not None:
 
-    # ========================================================
+    # --------------------------------------------------------
     # SAVE UPLOADED PDF
-    # ========================================================
+    # --------------------------------------------------------
 
     with open("temp_resume.pdf", "wb") as file:
         file.write(uploaded_file.getbuffer())
 
-
-    # ========================================================
+    # --------------------------------------------------------
     # EXTRACT RESUME TEXT
-    # ========================================================
+    # --------------------------------------------------------
 
     resume_text = extract_text(
         "temp_resume.pdf"
     )
 
-
     st.success(
         "✅ Resume uploaded successfully!"
     )
 
-
-    # ========================================================
+    # --------------------------------------------------------
     # VIEW EXTRACTED RESUME
-    # ========================================================
+    # --------------------------------------------------------
 
     with st.expander(
         "📄 View Extracted Resume Text"
@@ -94,7 +92,7 @@ if uploaded_file is not None:
     ):
 
         with st.spinner(
-            "AI is analyzing your resume..."
+            "Analyzing resume with AI..."
         ):
 
             try:
@@ -103,8 +101,7 @@ if uploaded_file is not None:
                     resume_text
                 )
 
-                # Store analysis in session
-                st.session_state.resume_analysis = analysis
+                st.session_state.analysis = analysis
 
             except Exception as e:
 
@@ -113,30 +110,28 @@ if uploaded_file is not None:
                 )
 
 
-    # ========================================================
+    # --------------------------------------------------------
     # DISPLAY RESUME ANALYSIS
-    # ========================================================
+    # --------------------------------------------------------
 
-    if "resume_analysis" in st.session_state:
+    if "analysis" in st.session_state:
 
-        analysis = st.session_state.resume_analysis
+        analysis = st.session_state.analysis
 
         st.subheader("📊 ATS Score")
 
         st.metric(
-            "ATS Score",
+            "ATS Compatibility Score",
             f"{analysis.ats_score}/100"
         )
-
 
         st.subheader(
             "💼 Years of Experience"
         )
 
         st.write(
-            f"{analysis.years_of_experience} years"
+            analysis.years_of_experience
         )
-
 
         st.subheader(
             "💪 Strengths"
@@ -148,7 +143,6 @@ if uploaded_file is not None:
                 f"• {item}"
             )
 
-
         st.subheader(
             "⚠️ Weaknesses"
         )
@@ -158,7 +152,6 @@ if uploaded_file is not None:
             st.write(
                 f"• {item}"
             )
-
 
         st.subheader(
             "❌ Missing Skills"
@@ -170,7 +163,6 @@ if uploaded_file is not None:
                 f"• {item}"
             )
 
-
         st.subheader(
             "📚 Recommended Skills"
         )
@@ -180,7 +172,6 @@ if uploaded_file is not None:
             st.write(
                 f"• {item}"
             )
-
 
         st.subheader(
             "🎯 Suitable Roles"
@@ -192,9 +183,8 @@ if uploaded_file is not None:
                 f"• {item}"
             )
 
-
         st.subheader(
-            "🛠️ Improvement Suggestions"
+            "💡 Improvement Suggestions"
         )
 
         for item in analysis.improvement_suggestions:
@@ -203,7 +193,6 @@ if uploaded_file is not None:
                 f"• {item}"
             )
 
-
         st.subheader(
             "📝 Overall Assessment"
         )
@@ -211,7 +200,6 @@ if uploaded_file is not None:
         st.write(
             analysis.overall_assessment
         )
-
 
         st.subheader(
             "⭐ Top Recommendation"
@@ -239,19 +227,19 @@ if uploaded_file is not None:
 
     if st.button(
         "🎯 Match Resume to Job",
-        key="match_resume_button"
+        key="match_job_button"
     ):
 
         if not job_description.strip():
 
             st.warning(
-                "⚠️ Please paste a job description."
+                "Please paste a job description first."
             )
 
         else:
 
             with st.spinner(
-                "🔍 Comparing resume with job description..."
+                "Comparing resume with job description..."
             ):
 
                 try:
@@ -261,7 +249,7 @@ if uploaded_file is not None:
                         job_description
                     )
 
-                    st.session_state.job_match_result = (
+                    st.session_state.match_result = (
                         match_result
                     )
 
@@ -272,27 +260,22 @@ if uploaded_file is not None:
                     )
 
 
-    # ========================================================
+    # --------------------------------------------------------
     # DISPLAY JOB MATCH RESULT
-    # ========================================================
+    # --------------------------------------------------------
 
-    if "job_match_result" in st.session_state:
+    if "match_result" in st.session_state:
 
-        match_result = (
-            st.session_state.job_match_result
-        )
-
+        match_result = st.session_state.match_result
 
         st.subheader(
             "🎯 Job Match Result"
         )
 
-
         st.metric(
             "Match Score",
             f"{match_result.match_score}/100"
         )
-
 
         st.subheader(
             "✅ Matching Skills"
@@ -304,7 +287,6 @@ if uploaded_file is not None:
                 f"• {item}"
             )
 
-
         st.subheader(
             "❌ Missing Skills"
         )
@@ -314,7 +296,6 @@ if uploaded_file is not None:
             st.write(
                 f"• {item}"
             )
-
 
         st.subheader(
             "💼 Matching Experience"
@@ -326,7 +307,6 @@ if uploaded_file is not None:
                 f"• {item}"
             )
 
-
         st.subheader(
             "⚠️ Experience Gaps"
         )
@@ -337,7 +317,6 @@ if uploaded_file is not None:
                 f"• {item}"
             )
 
-
         st.subheader(
             "💡 Recommendations"
         )
@@ -347,7 +326,6 @@ if uploaded_file is not None:
             st.write(
                 f"• {item}"
             )
-
 
         st.subheader(
             "📝 Overall Assessment"
@@ -367,8 +345,8 @@ if uploaded_file is not None:
     )
 
     st.write(
-        "Build the vector store used by the Resume Assistant "
-        "for semantic search."
+        "Build the vector store used by the "
+        "Resume Agent for semantic search."
     )
 
 
@@ -389,13 +367,8 @@ if uploaded_file is not None:
                 )
 
                 st.success(
-                    f"✅ Resume knowledge base created successfully "
-                    f"with {total_records} chunks."
-                )
-
-                # Remember selected resume
-                st.session_state.resume_id = (
-                    "sivani_resume"
+                    "✅ Resume knowledge base created "
+                    f"successfully with {total_records} chunks."
                 )
 
             except Exception as e:
@@ -406,111 +379,106 @@ if uploaded_file is not None:
 
 
     # ========================================================
-    # INITIALIZE RESUME ID
-    # ========================================================
-
-    if "resume_id" not in st.session_state:
-
-        st.session_state.resume_id = (
-            "sivani_resume"
-        )
-
-
-    # ========================================================
-    # RESUME ASSISTANT
+    # RESUME AGENT
     # ========================================================
 
     st.header(
-        "5️⃣ Resume Assistant"
+        "5️⃣ Resume Agent"
     )
 
     st.write(
         "Ask questions about the uploaded resume. "
-        "The assistant remembers the conversation."
+        "The AI agent decides when to use the resume "
+        "search tool and remembers the conversation."
     )
 
 
-    # ========================================================
-    # INITIALIZE CONVERSATION
-    # ========================================================
+    # --------------------------------------------------------
+    # INITIALIZE AGENT CONVERSATION
+    # --------------------------------------------------------
 
-    if "resume_conversation" not in st.session_state:
+    if "agent_conversation" not in st.session_state:
 
-        st.session_state.resume_conversation = []
+        st.session_state.agent_conversation = []
 
 
-    # ========================================================
-    # DISPLAY PREVIOUS CONVERSATION
-    # ========================================================
+    # --------------------------------------------------------
+    # CLEAR CONVERSATION
+    # --------------------------------------------------------
 
-    for message in (
-        st.session_state.resume_conversation
+    if st.button(
+        "🗑️ Clear Agent Conversation",
+        key="clear_agent_conversation"
     ):
 
-        if message["role"] == "user":
+        st.session_state.agent_conversation = []
 
-            with st.chat_message("user"):
-
-                st.write(
-                    message["content"]
-                )
-
-        elif message["role"] == "assistant":
-
-            with st.chat_message("assistant"):
-
-                st.write(
-                    message["content"]
-                )
+        st.rerun()
 
 
-    # ========================================================
+    # --------------------------------------------------------
+    # DISPLAY PREVIOUS CONVERSATION
+    # --------------------------------------------------------
+
+    for message in st.session_state.agent_conversation:
+
+        with st.chat_message(
+            message["role"]
+        ):
+
+            st.write(
+                message["content"]
+            )
+
+
+    # --------------------------------------------------------
     # CHAT INPUT
-    # ========================================================
+    # --------------------------------------------------------
 
     question = st.chat_input(
-        "Ask a question about the resume..."
+        "Ask the agent about the resume..."
     )
 
 
     if question:
 
-        # ====================================================
+        # ----------------------------------------------------
         # DISPLAY USER QUESTION
-        # ====================================================
+        # ----------------------------------------------------
 
-        with st.chat_message("user"):
+        with st.chat_message(
+            "user"
+        ):
 
             st.write(
                 question
             )
 
 
-        # ====================================================
-        # GENERATE ANSWER
-        # ====================================================
+        # ----------------------------------------------------
+        # RUN AGENT
+        # ----------------------------------------------------
 
-        with st.chat_message("assistant"):
+        with st.chat_message(
+            "assistant"
+        ):
 
             with st.spinner(
-                "🔍 Searching the resume..."
+                "🤖 Agent is thinking..."
             ):
 
                 try:
 
-                    answer, results = answer_question(
+                    answer = run_agent(
                         question,
-                        st.session_state.resume_conversation,
-                        st.session_state.resume_id
+                        st.session_state.agent_conversation
                     )
 
                 except Exception as e:
 
                     answer = (
-                        f"❌ Resume Assistant error: {e}"
+                        f"❌ Agent error: {e}"
                     )
-
-                    results = []
 
 
             st.write(
@@ -518,66 +486,20 @@ if uploaded_file is not None:
             )
 
 
-            # =================================================
-            # SHOW RETRIEVED EVIDENCE
-            # =================================================
-
-            if results:
-
-                with st.expander(
-                    "🔍 Retrieved Resume Evidence"
-                ):
-
-                    for result in results:
-
-                        st.write(
-                            f"**Chunk {result['chunk_id']}** "
-                            f"| Similarity: "
-                            f"{result['score']:.4f}"
-                        )
-
-                        st.write(
-                            result["text"]
-                        )
-
-                        st.divider()
-
-            else:
-
-                st.info(
-                    "No relevant resume evidence was retrieved."
-                )
-
-
-        # ====================================================
+        # ----------------------------------------------------
         # SAVE CONVERSATION
-        # ====================================================
+        # ----------------------------------------------------
 
-        st.session_state.resume_conversation.append(
+        st.session_state.agent_conversation.append(
             {
                 "role": "user",
                 "content": question
             }
         )
 
-
-        st.session_state.resume_conversation.append(
+        st.session_state.agent_conversation.append(
             {
                 "role": "assistant",
                 "content": answer
             }
         )
-
-
-    # ========================================================
-    # CLEAR CONVERSATION
-    # ========================================================
-
-    if st.button(
-        "🗑️ Clear Conversation",
-        key="clear_resume_conversation"
-    ):
-
-        st.session_state.resume_conversation = []
-
-        st.rerun()
