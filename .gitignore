@@ -1,30 +1,21 @@
+# Environment
+.env
+.venv/
+
 # Python
 __pycache__/
 *.py[cod]
-*.pyo
-
-# Virtual environment
-.venv/
-
-# Environment variables / secrets
-.env
-.env.*
 
 # macOS
 .DS_Store
 
-# Local uploaded resumes
-uploads/
+# Local resume files
 temp_resume.pdf
+uploads/
 
 # Generated vector stores
 vector_stores/
 resume_vectors.json
 
-# Development backups
+# Backup files
 *_backup_*.py
-*_backup.py
-
-# Local test files
-semantic_search_test.py
-test_*.py
