@@ -1,6 +1,16 @@
 import html
+import os
 import re
+import shutil
+import subprocess
+import textwrap
+from pathlib import Path
+
 import streamlit as st
+from docx import Document
+from reportlab.lib.pagesizes import LETTER
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 
 from utils.pdf_reader import extract_text
 from utils.ai import analyze_resume
@@ -17,6 +27,7 @@ from rag import answer_question
 APP_NAME = "AI Resume Reviewer"
 RESUME_ID = "sivani_resume"
 TEMP_RESUME_PATH = "temp_resume.pdf"
+TEMP_INDEX_PDF_PATH = "temp_resume_for_indexing.pdf"
 
 GITHUB_URL = "https://github.com/sivanisankar123/AI-Resume-Reviewer"
 LIVE_URL = "https://ai-resume-reviewer-5wxpt59pgrevmtfskknhhl.streamlit.app/"
@@ -106,6 +117,140 @@ def normalize_resume_id(filename: str) -> str:
     name = re.sub(r"[^a-z0-9]+", "_", name)
     name = name.strip("_")
     return name or RESUME_ID
+
+
+def extract_docx_text(path: str) -> str:
+    """Extract readable text from a DOCX resume, including table content."""
+    document = Document(path)
+    parts = []
+
+    for paragraph in document.paragraphs:
+        value = paragraph.text.strip()
+        if value:
+            parts.append(value)
+
+    for table in document.tables:
+        for row in table.rows:
+            cells = [cell.text.strip() for cell in row.cells]
+            row_text = " | ".join(cell for cell in cells if cell)
+            if row_text:
+                parts.append(row_text)
+
+    return "\\n".join(parts).strip()
+
+
+def extract_doc_text(path: str) -> str:
+    """Best-effort extraction for legacy .doc files.
+
+    Streamlit Cloud does not guarantee a Microsoft Word runtime, so try
+    common command-line converters when available and fail with a clear
+    message instead of silently returning bad text.
+    """
+    for command in ("antiword", "catdoc"):
+        executable = shutil.which(command)
+        if executable:
+            try:
+                result = subprocess.run(
+                    [executable, path],
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
+                    check=True,
+                )
+                if result.stdout.strip():
+                    return result.stdout.strip()
+            except (subprocess.SubprocessError, OSError):
+                pass
+
+    soffice = shutil.which("soffice") or shutil.which("libreoffice")
+    if soffice:
+        out_dir = str(Path(path).parent / "doc_conversion")
+        os.makedirs(out_dir, exist_ok=True)
+        try:
+            subprocess.run(
+                [soffice, "--headless", "--convert-to", "txt:Text", "--outdir", out_dir, path],
+                capture_output=True,
+                text=True,
+                timeout=60,
+                check=True,
+            )
+            converted = Path(out_dir) / (Path(path).stem + ".txt")
+            if converted.exists():
+                value = converted.read_text(errors="ignore").strip()
+                if value:
+                    return value
+        except (subprocess.SubprocessError, OSError):
+            pass
+
+    raise RuntimeError(
+        "Legacy .doc extraction is unavailable in this deployment environment. "
+        "Please use .docx or .pdf, or install antiword/LibreOffice for .doc support."
+    )
+
+
+def write_text_as_pdf(text: str, output_path: str) -> None:
+    """Create a simple PDF from extracted DOC/DOCX text for the existing RAG pipeline."""
+    styles = getSampleStyleSheet()
+    body = styles["BodyText"]
+    body.fontName = "Helvetica"
+    body.fontSize = 9
+    body.leading = 12
+
+    document = SimpleDocTemplate(
+        output_path,
+        pagesize=LETTER,
+        rightMargin=40,
+        leftMargin=40,
+        topMargin=40,
+        bottomMargin=40,
+    )
+
+    story = []
+    for paragraph in text.splitlines():
+        cleaned = paragraph.strip()
+        if cleaned:
+            safe = html.escape(cleaned).replace("\\n", "<br/>")
+            story.append(Paragraph(safe, body))
+            story.append(Spacer(1, 4))
+
+    document.build(story)
+
+
+def prepare_uploaded_resume(uploaded_file) -> str:
+    """Save the upload, extract its text, and prepare a PDF for the existing RAG builder."""
+    suffix = Path(uploaded_file.name).suffix.lower()
+    upload_path = f"temp_resume{suffix}"
+
+    with open(upload_path, "wb") as file:
+        file.write(uploaded_file.getbuffer())
+
+    if suffix == ".pdf":
+        # The upload is already saved as temp_resume.pdf. Do not copy the file
+        # onto itself, which raises SameFileError.
+        if upload_path != TEMP_RESUME_PATH:
+            shutil.copyfile(upload_path, TEMP_RESUME_PATH)
+        return extract_text(TEMP_RESUME_PATH)
+
+    if suffix == ".docx":
+        resume_text = extract_docx_text(upload_path)
+    elif suffix == ".doc":
+        resume_text = extract_doc_text(upload_path)
+    else:
+        raise ValueError("Unsupported resume format. Please upload PDF, DOC or DOCX.")
+
+    if not resume_text.strip():
+        raise ValueError("No readable text was found in the uploaded resume.")
+
+    # Convert extracted text to a temporary PDF so the existing vector-store
+    # pipeline can continue using its current PDF-based implementation.
+    write_text_as_pdf(resume_text, TEMP_INDEX_PDF_PATH)
+    shutil.copyfile(TEMP_INDEX_PDF_PATH, TEMP_RESUME_PATH)
+    return resume_text
+
+
+def build_current_resume_store() -> int:
+    """Build the existing vector store from the normalized temporary PDF."""
+    return build_resume_store(TEMP_RESUME_PATH, st.session_state.resume_id)
 
 
 def render_score_ring(score: int):
@@ -636,59 +781,183 @@ div.stDownloadButton > button:hover {
 /* ---------- Footer ---------- */
 .app-footer {
     border-top: 1px solid #e3e9f3;
-    margin-top: 45px;
-    padding: 28px 8px 12px;
+    margin-top: 28px;
+    padding: 18px 4px 6px;
     display: grid;
-    grid-template-columns: 1.2fr 1fr 1.2fr;
-    gap: 25px;
+    grid-template-columns: 1.2fr .9fr .9fr;
+    gap: 18px;
     align-items: center;
     color: #7e8aa0;
-    font-size: .78rem;
+    font-size: .76rem;
 }
 
 .footer-name {
     text-align: right;
-    color: #7e8aa0;
 }
 
 .footer-name strong {
     color: #1a3475;
     display: block;
-    font-size: .9rem;
-    margin-top: 5px;
+    font-size: .84rem;
 }
 
 .footer-center {
-    text-align: center;
-    color: #5972a2;
-    font-size: .9rem;
-    line-height: 1.55;
-    font-style: italic;
-}
-
-.footer-center b {
-    color: #1a3475;
-    font-size: 1rem;
-    font-style: normal;
-}
-
-.footer-links {
-    margin-top: 9px;
+    text-align:center;
+    color:#5972a2;
+    font-style:italic;
 }
 
 .footer-links a {
     color: #315fbd !important;
-    text-decoration: none !important;
+    text-decoration: none;
     font-weight: 700;
-    margin-right: 15px;
+    margin-right: 12px;
 }
 
-.footer-links a:hover {
-    text-decoration: underline !important;
+/* ---------- Strong button contrast ---------- */
+div.stButton > button,
+div.stButton > button[kind="secondary"],
+div.stButton > button[kind="primary"] {
+    background: linear-gradient(135deg, #2f6df6, #4b82ff) !important;
+    color: #ffffff !important;
+    -webkit-text-fill-color: #ffffff !important;
+    border: 1px solid #2f6df6 !important;
+    font-weight: 800 !important;
+    box-shadow: 0 5px 14px rgba(47,109,246,.16) !important;
+}
+
+div.stButton > button:hover,
+div.stButton > button[kind="secondary"]:hover,
+div.stButton > button[kind="primary"]:hover {
+    background: linear-gradient(135deg, #245bd1, #3b72ea) !important;
+    color: #ffffff !important;
+    -webkit-text-fill-color: #ffffff !important;
+}
+
+/* ---------- Readable text areas on light and dark Streamlit themes ---------- */
+[data-testid="stTextArea"] textarea {
+    background: #ffffff !important;
+    color: #17213a !important;
+    -webkit-text-fill-color: #17213a !important;
+    caret-color: #2f6df6 !important;
+    border: 1px solid #dce5f3 !important;
+    border-radius: 12px !important;
+    line-height: 1.55 !important;
+}
+
+[data-testid="stTextArea"] textarea::placeholder {
+    color: #8a97ac !important;
+    -webkit-text-fill-color: #8a97ac !important;
+}
+
+[data-testid="stTextArea"] textarea:focus {
+    border-color: #7ca4f8 !important;
+    box-shadow: 0 0 0 2px rgba(47,109,246,.10) !important;
+}
+
+/* ---------- Guided workflow ---------- */
+.workflow-card {
+    background: rgba(255,255,255,.94);
+    border: 1px solid #dfe7f4;
+    border-radius: 18px;
+    padding: 20px;
+    margin: 0 0 20px;
+    box-shadow: 0 8px 22px rgba(30, 48, 94, .05);
+}
+
+.workflow-title {
+    color: #152650;
+    font-size: 1.05rem;
+    font-weight: 850;
+    margin-bottom: 4px;
+}
+
+.workflow-subtitle {
+    color: #75839d;
+    font-size: .8rem;
+    margin-bottom: 15px;
+}
+
+.workflow-grid {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 10px;
+}
+
+.workflow-step {
+    position: relative;
+    background: #f7f9fe;
+    border: 1px solid #e3eaf6;
+    border-radius: 13px;
+    padding: 13px;
+    min-height: 118px;
+}
+
+.workflow-number {
+    width: 27px;
+    height: 27px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    background: #2f6df6;
+    color: #fff;
+    font-size: .75rem;
+    font-weight: 850;
+    margin-bottom: 8px;
+}
+
+.workflow-step-title {
+    color: #1a2b55;
+    font-weight: 820;
+    font-size: .84rem;
+}
+
+.workflow-step-text {
+    color: #7a879f;
+    font-size: .72rem;
+    line-height: 1.45;
+    margin-top: 4px;
+}
+
+.workflow-next {
+    color: #7290c9;
+    font-size: .72rem;
+    margin-top: 7px;
+    font-weight: 750;
+}
+
+/* ---------- File support badge ---------- */
+.file-support {
+    display: inline-flex;
+    gap: 7px;
+    flex-wrap: wrap;
+    margin: 3px 0 12px;
+}
+
+.file-type {
+    background: #eef4ff;
+    color: #315ba8;
+    border: 1px solid #d8e5ff;
+    border-radius: 999px;
+    padding: 4px 9px;
+    font-size: .7rem;
+    font-weight: 800;
 }
 
 /* ---------- Responsive ---------- */
+@media (max-width: 1100px) {
+    .workflow-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+}
+
 @media (max-width: 900px) {
+    .workflow-grid {
+        grid-template-columns: 1fr;
+    }
+    .workflow-step {
+        min-height: auto;
+    }
     .feature-strip {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
@@ -697,10 +966,10 @@ div.stDownloadButton > button:hover {
     }
     .app-footer {
         grid-template-columns: 1fr;
-        text-align: center;
+        text-align:left;
     }
     .footer-center, .footer-name {
-        text-align: center;
+        text-align:left;
     }
 }
 </style>
@@ -803,6 +1072,45 @@ st.markdown(
             <div><div class="feature-chip-title">Ask</div><div class="feature-chip-subtitle">Chat with your resume</div></div>
         </div>
     </div>
+
+    <div class="workflow-card">
+        <div class="workflow-title">🚀 How to use AI Resume Reviewer</div>
+        <div class="workflow-subtitle">
+            Follow these steps in order. Job matching is optional, while the Knowledge Base is required for Resume Agent chat.
+        </div>
+        <div class="workflow-grid">
+            <div class="workflow-step">
+                <div class="workflow-number">1</div>
+                <div class="workflow-step-title">📄 Upload Resume</div>
+                <div class="workflow-step-text">Upload your PDF, DOC or DOCX resume.</div>
+                <div class="workflow-next">Start here →</div>
+            </div>
+            <div class="workflow-step">
+                <div class="workflow-number">2</div>
+                <div class="workflow-step-title">✨ Analyze Resume</div>
+                <div class="workflow-step-text">Click Analyze Resume to get ATS score, experience, strengths and gaps.</div>
+                <div class="workflow-next">Next →</div>
+            </div>
+            <div class="workflow-step">
+                <div class="workflow-number">3</div>
+                <div class="workflow-step-title">🎯 Match a Job</div>
+                <div class="workflow-step-text">Optional: paste a job description and compare it with the resume.</div>
+                <div class="workflow-next">Optional →</div>
+            </div>
+            <div class="workflow-step">
+                <div class="workflow-number">4</div>
+                <div class="workflow-step-title">🧠 Build Knowledge Base</div>
+                <div class="workflow-step-text">Index the resume so the AI can search its content.</div>
+                <div class="workflow-next">Required for chat →</div>
+            </div>
+            <div class="workflow-step">
+                <div class="workflow-number">5</div>
+                <div class="workflow-step-title">🤖 Ask Resume Agent</div>
+                <div class="workflow-step-text">Chat naturally about experience, skills, projects and more.</div>
+                <div class="workflow-next">Ask away →</div>
+            </div>
+        </div>
+    </div>
     """,
     unsafe_allow_html=True,
 )
@@ -819,12 +1127,26 @@ with left:
         render_section_title(
             "📄",
             "Upload Your Resume",
-            "Upload a PDF file to get started with AI analysis",
+            "Upload PDF, DOC or DOCX to start the workflow",
+        )
+
+        st.markdown(
+            """
+            <div class="file-support">
+                <span class="file-type">PDF</span>
+                <span class="file-type">DOC</span>
+                <span class="file-type">DOCX</span>
+                <span style="color:#7b89a2;font-size:.72rem;padding-top:4px;">
+                    Upload once, then click <b>Analyze Resume</b>.
+                </span>
+            </div>
+            """,
+            unsafe_allow_html=True,
         )
 
         uploaded_file = st.file_uploader(
-            "Upload resume PDF",
-            type=["pdf"],
+            "Upload your resume",
+            type=["pdf", "doc", "docx"],
             label_visibility="collapsed",
         )
 
@@ -832,10 +1154,11 @@ with left:
             is_new_file = uploaded_file.name != st.session_state.uploaded_file_name
 
             if is_new_file:
-                with open(TEMP_RESUME_PATH, "wb") as f:
-                    f.write(uploaded_file.getbuffer())
-
-                resume_text = extract_text(TEMP_RESUME_PATH)
+                try:
+                    resume_text = prepare_uploaded_resume(uploaded_file)
+                except Exception as exc:
+                    st.error(f"❌ Could not read this resume: {exc}")
+                    st.stop()
 
                 # Keep a stable store id for compatibility with the existing RAG/agent backend.
                 # Each rebuild overwrites the prior local store with the current uploaded resume.
@@ -849,10 +1172,12 @@ with left:
                 st.session_state.resume_conversation = []
 
             st.success(f"✅ {uploaded_file.name} uploaded successfully")
+            st.caption("Step 2: Click **Analyze Resume** to generate the AI resume details. "
+                       "Then optionally use **Analyze Match**, build the Knowledge Base, and chat with the Resume Agent.")
 
             b1, b2 = st.columns(2)
             with b1:
-                if st.button("✨ Analyze Resume", use_container_width=True):
+                if st.button("✨ Analyze Resume", use_container_width=True, help="Step 2: Generate ATS score, experience, strengths, missing skills and recommendations."):
                     with st.spinner("Analyzing resume with AI..."):
                         st.session_state.analysis = analyze_resume(
                             st.session_state.resume_text
@@ -860,18 +1185,15 @@ with left:
                     st.toast("Resume analysis completed", icon="✅")
 
             with b2:
-                if st.button("🧠 Build Knowledge Base", use_container_width=True):
+                if st.button("🧠 Build Knowledge Base", use_container_width=True, help="Step 4: Index your resume for AI search and Resume Agent chat."):
                     with st.spinner("Creating chunks and embeddings..."):
-                        count = build_resume_store(
-                            TEMP_RESUME_PATH,
-                            st.session_state.resume_id,
-                        )
+                        count = build_current_resume_store()
                     st.session_state.knowledge_base_ready = True
                     st.session_state.knowledge_base_chunks = count
                     st.toast(f"{count} chunks indexed", icon="🧠")
 
         else:
-            st.info("Upload a PDF resume to enable analysis, matching and AI search.")
+            st.info("Upload a PDF, DOC or DOCX resume to enable analysis, matching and AI search.")
 
 with right:
     with st.container(border=True):
@@ -945,6 +1267,8 @@ with job_col:
             "See how well your resume fits a target role",
         )
 
+        st.caption("Optional Step 3: Paste the job description below, then click **Analyze Match** to compare the role with your resume.")
+
         job_description = st.text_area(
             "Job description",
             value=st.session_state.job_description,
@@ -954,7 +1278,7 @@ with job_col:
         )
         st.session_state.job_description = job_description
 
-        if st.button("🎯 Analyze Match", use_container_width=True):
+        if st.button("🎯 Analyze Match", use_container_width=True, help="Optional Step 3: Compare your resume with a job description."):
             if not st.session_state.resume_text:
                 st.warning("Please upload a resume first.")
             elif not job_description.strip():
@@ -1175,12 +1499,9 @@ with kb_col:
                 st.info("Upload a resume and build the Knowledge Base.")
 
         if st.session_state.resume_text:
-            if st.button("🔄 Rebuild Knowledge Base", use_container_width=True):
+            if st.button("🔄 Rebuild Knowledge Base", use_container_width=True, help="Re-index the currently uploaded resume."):
                 with st.spinner("Rebuilding embeddings..."):
-                    count = build_resume_store(
-                        TEMP_RESUME_PATH,
-                        st.session_state.resume_id,
-                    )
+                    count = build_current_resume_store()
                 st.session_state.knowledge_base_ready = True
                 st.session_state.knowledge_base_chunks = count
                 st.rerun()
@@ -1194,6 +1515,7 @@ with preview_col:
         )
 
         if st.session_state.resume_text:
+            st.caption("Readable text extracted from your uploaded resume. Use the full-text option below to inspect everything.")
             preview = st.session_state.resume_text[:1400]
             st.text_area(
                 "Extracted Resume Preview",
@@ -1227,7 +1549,7 @@ render_section_title(
 
 with st.container(border=True):
     if not st.session_state.knowledge_base_ready:
-        st.info("Build the Resume Knowledge Base before chatting with the Resume Agent.")
+        st.info("🔒 Step 4 required: Click **Build Knowledge Base** above before chatting with the Resume Agent.")
     else:
         if not st.session_state.resume_conversation:
             st.markdown(
@@ -1309,17 +1631,28 @@ with st.container(border=True):
 
 st.markdown('<div id="about"></div>', unsafe_allow_html=True)
 
-footer_html = f"""<div class="app-footer">
-<div>
-<div><b>© 2026 AI Resume Reviewer.</b> All rights reserved.</div>
-<div style="margin-top:4px;">Built with ❤️ using OpenAI, Streamlit and Python.</div>
-<div class="footer-links">
-<a href="{GITHUB_URL}" target="_blank" rel="noopener noreferrer">GitHub</a>
-<a href="{LIVE_URL}" target="_blank" rel="noopener noreferrer">Live Demo</a>
-<a href="{LINKEDIN_URL}" target="_blank" rel="noopener noreferrer">LinkedIn</a>
+footer_html = textwrap.dedent(f"""
+<div class="app-footer">
+    <div>
+        <div><b>© 2026 AI Resume Reviewer.</b> All rights reserved.</div>
+        <div style="margin-top:4px;">Built with ❤️ using OpenAI, Streamlit and Python.</div>
+        <div class="footer-links" style="margin-top:7px;">
+            <a href="{GITHUB_URL}" target="_blank">GitHub</a>
+            <a href="{LIVE_URL}" target="_blank">Live Demo</a>
+            <a href="{LINKEDIN_URL}" target="_blank">LinkedIn</a>
+        </div>
+    </div>
+
+    <div class="footer-center">
+        Automate Today,<br>
+        <b>A Brighter Tomorrow ✨</b>
+    </div>
+
+    <div class="footer-name">
+        Created by
+        <strong>Sivani Sankar Mohapatra</strong>
+    </div>
 </div>
-</div>
-<div class="footer-center">Automate Today,<br><b>A Brighter Tomorrow ✨</b></div>
-<div class="footer-name">Created by<strong>Sivani Sankar Mohapatra</strong></div>
-</div>"""
-st.markdown(footer_html, unsafe_allow_html=True)
+""").strip()
+
+st.html(footer_html)
