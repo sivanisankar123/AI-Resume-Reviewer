@@ -972,6 +972,159 @@ div.stButton > button[kind="primary"]:hover {
         text-align:left;
     }
 }
+/* ============================================================
+   MOBILE UI FIX
+   ============================================================ */
+
+@media (max-width: 768px) {
+
+    /* ---------- Buttons ---------- */
+
+    div.stButton > button {
+        background: #3b82f6 !important;
+        color: #ffffff !important;
+        border: 1px solid #3b82f6 !important;
+        border-radius: 12px !important;
+        min-height: 48px !important;
+        font-size: 15px !important;
+        font-weight: 700 !important;
+        box-shadow: none !important;
+    }
+
+    div.stButton > button:hover {
+        background: #2563eb !important;
+        color: #ffffff !important;
+    }
+
+    div.stButton > button:focus {
+        color: #ffffff !important;
+    }
+
+    /* ---------- Secondary buttons ---------- */
+
+    button[kind="secondary"] {
+        background: #3b82f6 !important;
+        color: #ffffff !important;
+    }
+
+    /* ---------- Text areas ---------- */
+
+    textarea {
+        background-color: #ffffff !important;
+        color: #111827 !important;
+        caret-color: #2563eb !important;
+        border: 1px solid #cbd5e1 !important;
+    }
+
+    textarea::placeholder {
+        color: #64748b !important;
+        opacity: 1 !important;
+    }
+
+    /* ---------- Text input ---------- */
+
+    input {
+        background-color: #ffffff !important;
+        color: #111827 !important;
+        caret-color: #2563eb !important;
+    }
+
+    input::placeholder {
+        color: #64748b !important;
+        opacity: 1 !important;
+    }
+
+    /* ---------- Resume Agent chat input ---------- */
+
+    [data-testid="stChatInput"] {
+        background: #ffffff !important;
+        border: 1px solid #cbd5e1 !important;
+        border-radius: 14px !important;
+    }
+
+    [data-testid="stChatInput"] textarea {
+        background: #ffffff !important;
+        color: #111827 !important;
+        caret-color: #2563eb !important;
+    }
+
+    [data-testid="stChatInput"] textarea::placeholder {
+        color: #64748b !important;
+    }
+
+    /* Chat submit button */
+
+    [data-testid="stChatInput"] button {
+        background: #3b82f6 !important;
+        color: #ffffff !important;
+        border: none !important;
+    }
+
+    /* ---------- File uploader ---------- */
+
+    [data-testid="stFileUploader"] {
+        background: #ffffff !important;
+        color: #111827 !important;
+    }
+
+    [data-testid="stFileUploader"] section {
+        background: #ffffff !important;
+        border: 2px dashed #93b4f8 !important;
+    }
+
+    [data-testid="stFileUploader"] button {
+        background: #3b82f6 !important;
+        color: #ffffff !important;
+        border: none !important;
+    }
+
+    /* ---------- Extracted resume text ---------- */
+
+    [data-testid="stTextArea"] textarea {
+        background: #ffffff !important;
+        color: #111827 !important;
+    }
+
+    /* ---------- Expander text ---------- */
+
+    [data-testid="stExpander"] {
+        color: #111827 !important;
+    }
+
+    /* ---------- Mobile spacing ---------- */
+
+    .block-container {
+        padding-left: 1rem !important;
+        padding-right: 1rem !important;
+    }
+
+    /* ---------- Headings ---------- */
+
+    h1 {
+        font-size: 1.8rem !important;
+    }
+
+    h2 {
+        font-size: 1.45rem !important;
+    }
+
+    h3 {
+        font-size: 1.2rem !important;
+    }
+
+    /* ---------- Footer ---------- */
+
+    .app-footer {
+        grid-template-columns: 1fr !important;
+        text-align: center !important;
+        gap: 12px !important;
+    }
+
+    .footer-center,
+    .footer-name {
+        text-align: center !important;
+    }
+}
 </style>
 """,
     unsafe_allow_html=True,
