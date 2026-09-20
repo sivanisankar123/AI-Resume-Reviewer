@@ -1125,6 +1125,91 @@ div.stButton > button[kind="primary"]:hover {
         text-align: center !important;
     }
 }
+/* ============================================================
+   MOBILE RESUME AGENT CHAT FIX
+   ============================================================ */
+
+@media (max-width: 768px) {
+
+    /* Chat messages - make all text readable */
+    [data-testid="stChatMessage"] {
+        color: #111827 !important;
+        background-color: #ffffff !important;
+    }
+
+    [data-testid="stChatMessage"] p,
+    [data-testid="stChatMessage"] span,
+    [data-testid="stChatMessage"] div {
+        color: #111827 !important;
+    }
+
+    /* User question */
+    [data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarUser"]) {
+        color: #111827 !important;
+    }
+
+    /* Assistant response */
+    [data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarAssistant"]) {
+        color: #111827 !important;
+    }
+
+    /* Markdown inside chat messages */
+    [data-testid="stChatMessage"] .stMarkdown,
+    [data-testid="stChatMessage"] .stMarkdown p,
+    [data-testid="stChatMessage"] .stMarkdown li,
+    [data-testid="stChatMessage"] .stMarkdown strong,
+    [data-testid="stChatMessage"] .stMarkdown span {
+        color: #111827 !important;
+    }
+
+    /* Chat input */
+    [data-testid="stChatInput"] textarea {
+        background-color: #ffffff !important;
+        color: #111827 !important;
+        -webkit-text-fill-color: #111827 !important;
+        caret-color: #2563eb !important;
+    }
+
+    [data-testid="stChatInput"] textarea::placeholder {
+        color: #64748b !important;
+        -webkit-text-fill-color: #64748b !important;
+        opacity: 1 !important;
+    }
+
+    /* Chat input container */
+    [data-testid="stChatInput"] {
+        background-color: #ffffff !important;
+        border: 2px solid #cbd5e1 !important;
+    }
+
+    /* Send button */
+    [data-testid="stChatInput"] button {
+        background-color: #3b82f6 !important;
+        color: #ffffff !important;
+        border: none !important;
+    }
+
+    [data-testid="stChatInput"] button svg {
+        color: #ffffff !important;
+        fill: #ffffff !important;
+    }
+}
+@media (max-width: 768px) {
+
+    [data-testid="stChatMessage"] {
+        background: #f8fafc !important;
+        border: 1px solid #e2e8f0 !important;
+        border-radius: 14px !important;
+        padding: 12px 14px !important;
+        margin-bottom: 10px !important;
+    }
+
+    [data-testid="stChatMessage"] p {
+        color: #111827 !important;
+        font-size: 15px !important;
+        line-height: 1.5 !important;
+    }
+}
 </style>
 """,
     unsafe_allow_html=True,
